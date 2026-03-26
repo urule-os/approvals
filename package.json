@@ -22,14 +22,5 @@
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",
     "vitest": "^3.1.1"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/urule-os/approvals.git"
-  },
-  "homepage": "https://github.com/urule-os/approvals",
-  "bugs": {
-    "url": "https://github.com/urule-os/approvals/issues"
-  },
-  "license": "Apache-2.0"
+  }
 }
