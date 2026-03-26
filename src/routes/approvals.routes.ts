@@ -2,6 +2,54 @@ import type { FastifyInstance } from 'fastify';
 import type { ApprovalStatus, CreateRichApprovalParams } from '../types.js';
 import { ApprovalManager } from '../services/approval-manager.js';
 import { ApprovalRouter } from '../services/approval-router.js';
+import { z } from 'zod';
+
+// -- Zod Schemas ------------------------------------------------------
+
+const priorityEnum = z.enum(['low', 'medium', 'high', 'critical']);
+
+const createApprovalSchema = z.object({
+  runId: z.string(),
+  workspaceId: z.string(),
+  agentId: z.string(),
+  action: z.string(),
+  reason: z.string().min(1),
+  context: z.object({}).passthrough().optional(),
+  priority: priorityEnum.optional(),
+  assignedTo: z.array(z.string()).optional(),
+  expiresInMs: z.number().positive().optional(),
+  title: z.string().optional(),
+  reasoningPoints: z.array(z.any()).optional(),
+  proposedChanges: z.array(z.any()).optional(),
+  riskLevel: priorityEnum.optional(),
+  impactSummary: z.string().optional(),
+  accessPermissions: z.array(z.any()).optional(),
+  governanceDecision: z.object({}).passthrough().optional(),
+});
+
+const approveOrDenySchema = z.object({
+  decidedBy: z.string().min(1),
+  note: z.string().optional(),
+});
+
+const requestChangesSchema = z.object({
+  decidedBy: z.string().min(1),
+  note: z.string().min(1),
+});
+
+const escalateSchema = z.object({
+  escalateTo: z.array(z.string()).min(1),
+});
+
+const createRuleSchema = z.object({
+  workspaceId: z.string(),
+  pattern: z.string(),
+  assignTo: z.array(z.string()),
+  priority: priorityEnum,
+  autoApprove: z.boolean(),
+});
+
+// -- Routes -----------------------------------------------------------
 
 export function registerApprovalRoutes(
   app: FastifyInstance,
@@ -16,25 +64,11 @@ export function registerApprovalRoutes(
 
   // Create approval request
   app.post('/api/v1/approvals', async (request, reply) => {
-    const body = request.body as {
-      runId: string;
-      workspaceId: string;
-      agentId: string;
-      action: string;
-      reason: string;
-      context?: Record<string, unknown>;
-      priority?: 'low' | 'medium' | 'high' | 'critical';
-      assignedTo?: string[];
-      expiresInMs?: number;
-      // Rich fields
-      title?: string;
-      reasoningPoints?: CreateRichApprovalParams['reasoningPoints'];
-      proposedChanges?: CreateRichApprovalParams['proposedChanges'];
-      riskLevel?: CreateRichApprovalParams['riskLevel'];
-      impactSummary?: string;
-      accessPermissions?: CreateRichApprovalParams['accessPermissions'];
-      governanceDecision?: Record<string, unknown>;
-    };
+    const parsed = createApprovalSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Validation failed', details: parsed.error.issues });
+    }
+    const body = parsed.data;
 
     // Use router to determine assignees and priority if not provided
     const routing = router.route(body.workspaceId, body.action);
@@ -85,7 +119,11 @@ export function registerApprovalRoutes(
   // Approve
   app.post('/api/v1/approvals/:approvalId/approve', async (request, reply) => {
     const { approvalId } = request.params as { approvalId: string };
-    const body = request.body as { decidedBy: string; note?: string };
+    const parsed = approveOrDenySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Validation failed', details: parsed.error.issues });
+    }
+    const body = parsed.data;
     try {
       const approval = manager.approve(approvalId, {
         status: 'approved',
@@ -102,7 +140,11 @@ export function registerApprovalRoutes(
   // Deny
   app.post('/api/v1/approvals/:approvalId/deny', async (request, reply) => {
     const { approvalId } = request.params as { approvalId: string };
-    const body = request.body as { decidedBy: string; note?: string };
+    const parsed = approveOrDenySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Validation failed', details: parsed.error.issues });
+    }
+    const body = parsed.data;
     try {
       const approval = manager.deny(approvalId, {
         status: 'denied',
@@ -119,7 +161,11 @@ export function registerApprovalRoutes(
   // Reject (alias for deny)
   app.post('/api/v1/approvals/:approvalId/reject', async (request, reply) => {
     const { approvalId } = request.params as { approvalId: string };
-    const body = request.body as { decidedBy: string; note?: string };
+    const parsed = approveOrDenySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Validation failed', details: parsed.error.issues });
+    }
+    const body = parsed.data;
     try {
       const approval = manager.deny(approvalId, {
         status: 'denied',
@@ -136,7 +182,11 @@ export function registerApprovalRoutes(
   // Request changes
   app.post('/api/v1/approvals/:approvalId/request-changes', async (request, reply) => {
     const { approvalId } = request.params as { approvalId: string };
-    const body = request.body as { decidedBy: string; note: string };
+    const parsed = requestChangesSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Validation failed', details: parsed.error.issues });
+    }
+    const body = parsed.data;
     try {
       const approval = manager.requestChanges(approvalId, body.decidedBy, body.note);
       return approval;
@@ -149,7 +199,11 @@ export function registerApprovalRoutes(
   // Escalate
   app.post('/api/v1/approvals/:approvalId/escalate', async (request, reply) => {
     const { approvalId } = request.params as { approvalId: string };
-    const body = request.body as { escalateTo: string[] };
+    const parsed = escalateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Validation failed', details: parsed.error.issues });
+    }
+    const body = parsed.data;
     try {
       const approval = manager.escalate(approvalId, body.escalateTo);
       return approval;
@@ -192,13 +246,11 @@ export function registerApprovalRoutes(
 
   // Add routing rule
   app.post('/api/v1/approval-rules', async (request, reply) => {
-    const body = request.body as {
-      workspaceId: string;
-      pattern: string;
-      assignTo: string[];
-      priority: 'low' | 'medium' | 'high' | 'critical';
-      autoApprove: boolean;
-    };
+    const parsed = createRuleSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Validation failed', details: parsed.error.issues });
+    }
+    const body = parsed.data;
     const rule = router.addRule(body);
     return reply.status(201).send(rule);
   });
