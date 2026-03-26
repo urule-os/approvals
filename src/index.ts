@@ -12,3 +12,12 @@ server.listen({ port: config.port, host: config.host }, (err, address) => {
   }
   server.log.info(`${config.serviceName} listening at ${address}`);
 });
+
+// Graceful shutdown
+const shutdown = async () => {
+  server.log.info('Shutting down...');
+  await server.close();
+  process.exit(0);
+};
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
