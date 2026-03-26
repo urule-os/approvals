@@ -1,0 +1,35 @@
+{
+  "name": "@urule/approvals",
+  "version": "0.1.0",
+  "description": "Temporal-backed approval workflow service for urule",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.0",
+    "fastify": "^5.3.3",
+    "nats": "^2.29.3",
+    "ulid": "^2.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/urule-os/approvals.git"
+  },
+  "homepage": "https://github.com/urule-os/approvals",
+  "bugs": {
+    "url": "https://github.com/urule-os/approvals/issues"
+  },
+  "license": "Apache-2.0"
+}
