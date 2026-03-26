@@ -3,6 +3,11 @@ import type { ApprovalStatus, CreateRichApprovalParams } from '../types.js';
 import { ApprovalManager } from '../services/approval-manager.js';
 import { ApprovalRouter } from '../services/approval-router.js';
 import { z } from 'zod';
+import { AuditLogger } from '@urule/events';
+
+const audit = new AuditLogger('approvals', (topic, data) => {
+  console.log(JSON.stringify({ audit: true, topic, ...data as Record<string, unknown> }));
+});
 
 // -- Zod Schemas ------------------------------------------------------
 
@@ -130,6 +135,13 @@ export function registerApprovalRoutes(
         decidedBy: body.decidedBy,
         note: body.note,
       });
+
+      audit.approvalDecided(
+        { id: body.decidedBy, username: body.decidedBy },
+        approvalId, 'approved', `Approval "${approvalId}" approved by ${body.decidedBy}`,
+        { metadata: { note: body.note } },
+      ).catch(() => {});
+
       return approval;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
@@ -151,6 +163,13 @@ export function registerApprovalRoutes(
         decidedBy: body.decidedBy,
         note: body.note,
       });
+
+      audit.approvalDecided(
+        { id: body.decidedBy, username: body.decidedBy },
+        approvalId, 'denied', `Approval "${approvalId}" denied by ${body.decidedBy}`,
+        { metadata: { note: body.note } },
+      ).catch(() => {});
+
       return approval;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
@@ -206,6 +225,13 @@ export function registerApprovalRoutes(
     const body = parsed.data;
     try {
       const approval = manager.escalate(approvalId, body.escalateTo);
+
+      audit.approvalDecided(
+        { id: 'system', username: 'system' },
+        approvalId, 'escalated', `Approval "${approvalId}" escalated`,
+        { metadata: { escalateTo: body.escalateTo } },
+      ).catch(() => {});
+
       return approval;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
